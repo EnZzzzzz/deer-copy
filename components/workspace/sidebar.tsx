@@ -8,7 +8,8 @@ import {
   PanelLeft,
   ChevronUp,
 } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -29,18 +30,19 @@ const mockChatHistory: ChatHistory[] = [
 ];
 
 export function Sidebar() {
-  const [activeTab, setActiveTab] = useState<"chats" | "agents">("chats");
-  const [isNewChatActive, setIsNewChatActive] = useState(true);
+  const pathname = usePathname();
+  const isChatPage = pathname === "/chat" || pathname === "/";
+  const isAgentsPage = pathname === "/agents";
 
   return (
     <aside className="flex h-full w-[260px] flex-col border-r border-border bg-sidebar">
       {/* Header */}
       <div className="flex h-14 items-center justify-between px-3">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">
             DeerFlow
           </span>
-        </div>
+        </Link>
         <Button
           variant="ghost"
           size="icon"
@@ -52,50 +54,53 @@ export function Sidebar() {
 
       {/* New Chat Button */}
       <div className="px-3 pb-2">
-        <Button
-          className={cn(
-            "w-full justify-start gap-2 rounded-xl font-medium transition-all border",
-            isNewChatActive
-              ? "bg-muted text-foreground border-border hover:bg-muted/80"
-              : "bg-transparent text-sidebar-foreground hover:bg-muted border-transparent"
-          )}
-          onClick={() => setIsNewChatActive(true)}
-        >
-          <Plus className="h-4 w-4" />
-          新对话
-        </Button>
+        <Link href="/">
+          <Button
+            className={cn(
+              "w-full justify-start gap-2 rounded-xl font-medium transition-all border",
+              pathname === "/"
+                ? "bg-muted text-foreground border-border hover:bg-muted/80"
+                : "bg-transparent text-sidebar-foreground hover:bg-muted border-transparent"
+            )}
+          >
+            <Plus className="h-4 w-4" />
+            新对话
+          </Button>
+        </Link>
       </div>
 
       {/* Navigation */}
       <div className="px-3 py-2">
         <nav className="space-y-1">
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full justify-start gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
-              activeTab === "chats"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-            onClick={() => setActiveTab("chats")}
-          >
-            <MessageSquare className="h-4 w-4" />
-            对话
-          </Button>
+          <Link href="/chat">
+            <Button
+              variant="ghost"
+              className={cn(
+                "w-full justify-start gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
+                isChatPage
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <MessageSquare className="h-4 w-4" />
+              对话
+            </Button>
+          </Link>
 
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full justify-start gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
-              activeTab === "agents"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-            onClick={() => setActiveTab("agents")}
-          >
-            <Bot className="h-4 w-4" />
-            智能体
-          </Button>
+          <Link href="/agents">
+            <Button
+              variant="ghost"
+              className={cn(
+                "w-full justify-start gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
+                isAgentsPage
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <Bot className="h-4 w-4" />
+              智能体
+            </Button>
+          </Link>
         </nav>
       </div>
 
@@ -111,9 +116,6 @@ export function Sidebar() {
                 key={chat.id}
                 variant="ghost"
                 className="w-full justify-start truncate rounded-xl px-3 py-2 text-left text-sm font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                onClick={() => {
-                  setIsNewChatActive(false);
-                }}
               >
                 <span className="truncate">{chat.title}</span>
               </Button>

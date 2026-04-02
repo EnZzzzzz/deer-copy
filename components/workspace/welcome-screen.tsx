@@ -91,9 +91,7 @@ export function WelcomeScreen() {
               {/* Mode Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 >
                   {modes.find((m) => m.id === mode)?.icon}
                   {modes.find((m) => m.id === mode)?.label}
@@ -126,9 +124,7 @@ export function WelcomeScreen() {
               {/* Model Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1 rounded-lg text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 >
                   {model}
                   <ChevronDown className="h-3 w-3 opacity-50" />
