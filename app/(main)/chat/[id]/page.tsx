@@ -9,12 +9,19 @@ import {
   X,
   ArrowUp,
   Paperclip,
-  Sparkles,
-  ClipboardCopy,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
+  Globe,
+  FolderOpen,
+  FileText,
+  Terminal,
+  Lightbulb,
+  Sparkles,
+  ClipboardCopy,
+  Wrench,
 } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,70 +29,101 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 // ------------------------------------------------------------------
-// Mock data matching the design screenshots
+// Mock data matching the design screenshots with hidden steps
 // ------------------------------------------------------------------
 
-const MOCK_MESSAGES: MessageItem[] = [
+interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+}
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+
+// Mock messages with hidden steps like in the screenshot
+const MOCK_MESSAGES: Message[] = [
   {
     id: "m1",
     role: "user",
-    content:
-      '<think> 用户要求我返回一个标题，只需要标题，不要引号，不要解释。但问题是，用户没有给出任何具体的内容或主题要求',
+    content: "帮我生成一个登录页面",
   },
   {
     id: "m2",
     role: "assistant",
-    content: `1. 首先完成对文件的复制部分，了解已有什么\n2. 然后继续编写剩余的部分`,
+    content: `<think>用户想要一个登录页面。我需要：
+1. 创建一个 HTML 登录页面
+2. 包含用户名和密码输入
+3. 添加样式美化</think>`,
   },
   {
     id: "m3",
     role: "assistant",
-    content: `<think> 从之前的对话来看，文件已经被写入了一部分。让我先检查文件的当前状态。</think>`,
+    content: "我来帮你创建一个漂亮的登录页面。",
+    tool_calls: [
+      {
+        id: "tool-1",
+        name: "write_file",
+        args: {
+          path: "/tmp/user-data/workspace/login.html",
+          content: "<!DOCTYPE html>...",
+          description: "写入 login.html 文件",
+        },
+      },
+    ],
   },
   {
     id: "m4",
     role: "assistant",
-    content: `让我先检查文件的当前状态: [TOOL_CALL] <invoke name="Read"><args><param name="args">{"path": "/tmp/user-data/workspace/index.html", "limit": 50, "offset": 1}</param></args></invoke> </tool_call>`,
+    content: "文件已写入，结果如下",
+    tool_call_id: "tool-1",
   },
+  // This message has hidden steps like in the screenshot
   {
     id: "m5",
     role: "assistant",
-    type: "file-tree",
-    content: "查看生成的文件",
-    meta: "/tmp/user-data/workspace",
+    content: `<think>文件已经创建好了，现在需要把文件复制到 output 目录，让用户能够下载。</think>`,
+    tool_calls: [
+      {
+        id: "tool-2",
+        name: "read_file",
+        args: {
+          path: "/tmp/user-data/workspace/login.html",
+          limit: 50,
+          description: "读取完整文件",
+        },
+        result: { success: true, size: "617.96 KB" },
+      },
+      {
+        id: "tool-3",
+        name: "bash",
+        args: {
+          command: "mkdir -p /tmp/user-data/output",
+          description: "创建 output 目录",
+        },
+        result: { success: true },
+      },
+      {
+        id: "tool-4",
+        name: "bash",
+        args: {
+          command: "cp /tmp/user-data/workspace/login.html /tmp/user-data/output/login.html",
+          description: "复制文件到 output 目录",
+        },
+        result: { success: true },
+      },
+    ],
   },
   {
     id: "m6",
     role: "assistant",
-    type: "file",
-    content: "index.html",
-    meta: "HTML File",
-  },
-  {
-    id: "m7",
-    role: "assistant",
-    type: "step-collapsed",
-    content: "查看其他 1 个步骤",
-    meta: "",
-  },
-  {
-    id: "m8",
-    role: "assistant",
-    type: "checkpoint",
-    content: "补充收集页面相关内容",
-    meta: "/tmp/user-data/workspace/...html",
-  },
-  {
-    id: "m9",
-    role: "assistant",
-    content: `<think> 用户要求我返回一个标题...</think>`,
-  },
-  {
-    id: "m10",
-    role: "assistant",
-    type: "reference",
-    content: "参考",
-    meta: "",
+    content: "登录页面已生成完成！文件已保存到 output 目录。",
   },
 ];
 
@@ -94,18 +132,8 @@ const MOCK_ARTIFACT_CODE = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>小鹿爱吃面 - 个人主页</title>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <title>登录 - DeerFlow</title>
   <style>
-    :root {
-      --bg-main: #fdfbf8;
-      --bg-card: #ffffff;
-      --text-primary: #2d2a26;
-      --text-secondary: #6b6560;
-      --accent: #e8e2da;
-      --border: #e5e0d8;
-    }
-
     * {
       margin: 0;
       padding: 0;
@@ -117,220 +145,430 @@ const MOCK_ARTIFACT_CODE = `<!DOCTYPE html>
       display: flex;
       justify-content: center;
       align-items: center;
-      font-family: 'Noto Sans SC', sans-serif;
-      background: var(--bg-main);
-      color: var(--text-primary);
-      overflow-x: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .login-header h1 {
+      font-size: 28px;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .login-header p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 15px;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .login-button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .login-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .login-footer a {
+      color: #667eea;
+      text-decoration: none;
     }
   </style>
 </head>
 <body>
-  ...
+  <div class="login-container">
+    <div class="login-header">
+      <h1>欢迎回来</h1>
+      <p>请登录您的账户</p>
+    </div>
+    <form>
+      <div class="form-group">
+        <label>用户名</label>
+        <input type="text" placeholder="请输入用户名">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" placeholder="请输入密码">
+      </div>
+      <button type="submit" class="login-button">登录</button>
+    </form>
+    <div class="login-footer">
+      还没有账户？ <a href="#">立即注册</a>
+    </div>
+  </div>
 </body>
 </html>`;
 
 // ------------------------------------------------------------------
-// Types
+// Chain of Thought Components
 // ------------------------------------------------------------------
 
-type MessageRole = "user" | "assistant";
-type MessageType = "text" | "think" | "file" | "file-tree" | "step-collapsed" | "checkpoint" | "reference";
-
-interface MessageItem {
-  id: string;
-  role: MessageRole;
-  type?: MessageType;
-  content: string;
-  meta?: string;
+function ToolIcon({ name }: { name: string }) {
+  const iconMap: Record<string, React.ElementType> = {
+    web_search: Search,
+    image_search: Search,
+    web_fetch: Globe,
+    ls: FolderOpen,
+    read_file: FileText,
+    write_file: FileText,
+    str_replace: FileText,
+    bash: Terminal,
+  };
+  const Icon = iconMap[name] || Wrench;
+  return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }
 
-// ------------------------------------------------------------------
-// Components
-// ------------------------------------------------------------------
+function ToolCallStep({
+  toolCall,
+  isLast,
+}: {
+  toolCall: ToolCall;
+  isLast?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(isLast);
 
-function ThinkBlock({ content }: { content: string }) {
-  const [open, setOpen] = useState(true);
-  const text = content.replace(/<{0,1}think>/g, "").trim();
+  const getLabel = () => {
+    if (toolCall.args?.description) {
+      return String(toolCall.args.description);
+    }
+
+    switch (toolCall.name) {
+      case "web_search":
+        return toolCall.args?.query
+          ? `搜索 "${toolCall.args.query}"`
+          : "搜索相关信息";
+      case "image_search":
+        return toolCall.args?.query
+          ? `搜索图片 "${toolCall.args.query}"`
+          : "搜索相关图片";
+      case "web_fetch":
+        return "查看网页";
+      case "ls":
+        return "列出文件夹";
+      case "read_file":
+        return "读取文件";
+      case "write_file":
+        return "写入文件";
+      case "str_replace":
+        return "编辑文件";
+      case "bash":
+        return "执行命令";
+      default:
+        return `使用 "${toolCall.name}" 工具`;
+    }
+  };
+
+  const getMeta = () => {
+    if (toolCall.args?.path) return String(toolCall.args.path);
+    if (toolCall.args?.url) return String(toolCall.args.url);
+    if (toolCall.args?.command) return String(toolCall.args.command);
+    return null;
+  };
+
+  const meta = getMeta();
+
   return (
-    <div className="my-3 rounded-lg border border-border/60 bg-muted/40">
+    <div
+      className={cn(
+        "rounded-lg border bg-card transition-all",
+        isLast ? "border-border" : "border-border/60"
+      )}
+    >
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-accent/30"
       >
-        <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground/70">&lt;think&gt;</span>
-          <span className="line-clamp-1 text-left">{text.slice(0, 60)}</span>
-        </span>
-        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        <ToolIcon name={toolCall.name} />
+        <span className="flex-1 text-sm text-foreground/90">{getLabel()}</span>
+        <ChevronUp
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            expanded ? "rotate-180" : ""
+          )}
+        />
       </button>
-      {open && (
-        <div className="px-3 pb-3 text-sm leading-relaxed text-foreground/90">
-          {text}
+
+      {expanded && (
+        <div className="border-t border-border/60 px-3 py-2">
+          {meta && (
+            <div className="mb-2 rounded bg-muted/50 px-2.5 py-1.5 text-xs font-mono text-muted-foreground">
+              {meta}
+            </div>
+          )}
+          {toolCall.result !== undefined && (
+            <div className="rounded bg-muted/50 p-2">
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                结果
+              </div>
+              <pre className="max-h-40 overflow-auto text-xs text-muted-foreground">
+                {typeof toolCall.result === "string"
+                  ? toolCall.result
+                  : JSON.stringify(toolCall.result, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function UserMessage({ content }: { content: string }) {
-  return (
-    <div className="my-4 flex justify-start">
-      <div className="max-w-[90%] rounded-xl bg-muted px-4 py-2.5 text-sm leading-relaxed text-foreground">
-        {content}
-      </div>
-    </div>
-  );
-}
+function ReasoningBlock({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(true);
 
-function FileCard({ name, subtype, onView }: { name: string; subtype: string; onView?: () => void }) {
-  return (
-    <div
-      onClick={onView}
-      className="my-3 flex cursor-pointer items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm transition-colors hover:border-ring/60 hover:bg-accent/30"
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
-          <FileCode className="h-4.5 w-4.5 text-muted-foreground" />
-        </div>
-        <div>
-          <div className="text-sm font-medium text-foreground">{name}</div>
-          <div className="text-xs text-muted-foreground">{subtype}</div>
-        </div>
-      </div>
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-8 w-8"
-          onClick={(e) => {
-            e.stopPropagation();
-            onView?.();
-          }}
-        >
-          <Eye className="h-4 w-4 text-muted-foreground" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-8 w-8"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Download className="h-4 w-4 text-muted-foreground" />
-        </Button>
-      </div>
-    </div>
-  );
-}
+  // Clean think tags
+  const cleanContent = content
+    .replace(/<think>/g, "")
+    .replace(/<\/think>/g, "")
+    .trim();
 
-function StepCollapsed({ count }: { count: number }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="my-2">
+    <div className="rounded-lg border border-border/60 bg-muted/30">
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-accent/30"
       >
-        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        <span>查看其他 {count} 个步骤</span>
+        <div className="flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-foreground/90">思考</span>
+        </div>
+        <ChevronUp
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            expanded ? "" : "rotate-180"
+          )}
+        />
       </button>
+      {expanded && (
+        <div className="border-t border-border/60 px-3 py-2">
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+            {cleanContent}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function CheckpointCard({ title, path }: { title: string; path: string }) {
-  return (
-    <div className="my-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm">
-      <div className="text-sm font-medium text-foreground">{title}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{path}</div>
-    </div>
-  );
+// ------------------------------------------------------------------
+// Message Step Converter
+// ------------------------------------------------------------------
+
+interface Step {
+  id: string;
+  type: "reasoning" | "toolCall";
+  content?: string;
+  toolCall?: ToolCall;
 }
 
-function ReferenceCard() {
-  return (
-    <div className="my-3 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm">
-      <Sparkles className="h-4 w-4 text-muted-foreground" />
-      <span>参考</span>
-    </div>
-  );
+function convertToSteps(message: Message): Step[] {
+  const steps: Step[] = [];
+
+  // Extract reasoning
+  const reasoningMatch = message.content.match(/<think>([\s\S]*?)<\/think>/);
+  if (reasoningMatch) {
+    steps.push({
+      id: `${message.id}-reasoning`,
+      type: "reasoning",
+      content: reasoningMatch[1].trim(),
+    });
+  }
+
+  // Add tool calls
+  if (message.tool_calls) {
+    for (const tc of message.tool_calls) {
+      if (tc.name === "task") continue;
+      steps.push({
+        id: tc.id,
+        type: "toolCall",
+        toolCall: tc,
+      });
+    }
+  }
+
+  return steps;
 }
 
-function FileTreeCard({ title, path }: { title: string; path: string }) {
-  return (
-    <div className="my-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm">
-      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <PanelLeftOpen className="h-4 w-4 text-muted-foreground" />
-        <span>{title}</span>
-      </div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{path}</div>
-    </div>
-  );
-}
+// ------------------------------------------------------------------
+// StepsToggle - Hidden steps functionality
+// ------------------------------------------------------------------
 
-function AssistantMessage({ item, onViewArtifact }: { item: MessageItem; onViewArtifact?: () => void }) {
-  if (item.type === "think" || (item.content.includes("<think") && item.content.includes("</think>"))) {
-    return <ThinkBlock content={item.content} />;
-  }
-
-  if (item.type === "file") {
-    return <FileCard name={item.content} subtype={item.meta || "File"} onView={onViewArtifact} />;
-  }
-
-  if (item.type === "step-collapsed") {
-    return <StepCollapsed count={1} />;
-  }
-
-  if (item.type === "checkpoint") {
-    return <CheckpointCard title={item.content} path={item.meta || ""} />;
-  }
-
-  if (item.type === "reference") {
-    return <ReferenceCard />;
-  }
-
-  if (item.type === "file-tree") {
-    return <FileTreeCard title={item.content} path={item.meta || ""} />;
-  }
-
-  // Plain text with possible inline code styling
-  return (
-    <div className="my-2 text-sm leading-7 text-foreground">
-      {item.content.split("\n").map((line, idx) => (
-        <p key={idx} className="my-1">
-          {line}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function ChatMessageGroup({
-  items,
-  onViewArtifact,
+function StepsToggle({
+  count,
+  expanded,
+  onToggle,
 }: {
-  items: MessageItem[];
-  onViewArtifact?: () => void;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  const isUser = items[0]?.role === "user";
-  if (isUser) {
-    return <UserMessage content={items[0].content} />;
+  return (
+    <button
+      onClick={onToggle}
+      className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-accent/30"
+    >
+      <span className="text-sm text-muted-foreground">
+        {expanded ? "隐藏步骤" : `查看其他 ${count} 个步骤`}
+      </span>
+      <ChevronUp
+        className={cn(
+          "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+          expanded ? "rotate-180" : ""
+        )}
+      />
+    </button>
+  );
+}
+
+// ------------------------------------------------------------------
+// MessageGroup - With hidden steps
+// ------------------------------------------------------------------
+
+function MessageGroup({
+  message,
+  isLoading,
+}: {
+  message: Message;
+  isLoading?: boolean;
+}) {
+  const steps = useMemo(() => convertToSteps(message), [message]);
+  const [showHidden, setShowHidden] = useState(false);
+
+  if (message.role === "user") {
+    return (
+      <div className="my-4 flex justify-start">
+        <div className="max-w-[90%] rounded-xl bg-muted px-4 py-2.5 text-sm leading-relaxed text-foreground">
+          {message.content}
+        </div>
+      </div>
+    );
   }
 
-  // Try to merge consecutive think blocks into the same assistant group if needed.
-  // For simplicity we render assistant items sequentially under one avatar row.
+  // Get plain content (without think tags)
+  const plainContent = message.content
+    .replace(/<think>[\s\S]*?<\/think>/g, "")
+    .trim();
+
+  // Find last tool call index
+  const lastToolIndex = steps.reduce((acc, step, idx) => {
+    if (step.type === "toolCall") return idx;
+    return acc;
+  }, -1);
+
+  // Steps before last tool call are hidden
+  const hiddenSteps =
+    lastToolIndex > 0 ? steps.slice(0, lastToolIndex) : [];
+  const visibleSteps =
+    lastToolIndex >= 0 ? steps.slice(lastToolIndex) : steps;
+
   return (
     <div className="my-5 flex gap-3">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-semibold text-background">
         D
       </div>
-      <div className="min-w-0 flex-1">
-        {items.map((item) => (
-          <AssistantMessage key={item.id} item={item} onViewArtifact={onViewArtifact} />
-        ))}
+      <div className="min-w-0 flex-1 space-y-2">
+        {/* Hidden steps toggle */}
+        {hiddenSteps.length > 0 && (
+          <StepsToggle
+            count={hiddenSteps.length}
+            expanded={showHidden}
+            onToggle={() => setShowHidden(!showHidden)}
+          />
+        )}
+
+        {/* Hidden steps content */}
+        {showHidden &&
+          hiddenSteps.map((step) =>
+            step.type === "reasoning" ? (
+              <ReasoningBlock key={step.id} content={step.content || ""} />
+            ) : (
+              <ToolCallStep key={step.id} toolCall={step.toolCall!} />
+            )
+          )}
+
+        {/* Visible steps */}
+        {visibleSteps.map((step, idx) =>
+          step.type === "reasoning" ? (
+            <ReasoningBlock key={step.id} content={step.content || ""} />
+          ) : (
+            <ToolCallStep
+              key={step.id}
+              toolCall={step.toolCall!}
+              isLast={idx === visibleSteps.length - 1}
+            />
+          )
+        )}
+
+        {/* Plain text content */}
+        {plainContent && (
+          <div className="text-sm leading-relaxed text-foreground">
+            {plainContent}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+// ------------------------------------------------------------------
+// ArtifactPanel
+// ------------------------------------------------------------------
 
 function ArtifactPanel({
   open,
@@ -358,7 +596,10 @@ function ArtifactPanel({
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">index.html</span>
+          <span className="text-sm font-medium text-foreground">
+            login.html
+          </span>
+          <span className="text-xs text-muted-foreground">617.96 KB</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="flex items-center rounded-md border border-border bg-background p-0.5">
@@ -366,7 +607,9 @@ function ArtifactPanel({
               onClick={() => setMode("code")}
               className={cn(
                 "flex h-7 items-center gap-1 rounded px-2 text-xs font-medium transition-colors",
-                mode === "code" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                mode === "code"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               <FileCode className="h-3.5 w-3.5" />
@@ -376,21 +619,33 @@ function ArtifactPanel({
               onClick={() => setMode("preview")}
               className={cn(
                 "flex h-7 items-center gap-1 rounded px-2 text-xs font-medium transition-colors",
-                mode === "preview" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                mode === "preview"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Eye className="h-3.5 w-3.5" />
               Preview
             </button>
           </div>
-          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={copyCode}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-8 w-8"
+            onClick={copyCode}
+          >
             {copied ? (
               <span className="text-[10px]">OK</span>
             ) : (
               <ClipboardCopy className="h-4 w-4 text-muted-foreground" />
             )}
           </Button>
-          <Button variant="ghost" size="icon-sm" className="h-8 w-8" onClick={onClose}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-8 w-8"
+            onClick={onClose}
+          >
             <X className="h-4 w-4 text-muted-foreground" />
           </Button>
         </div>
@@ -417,6 +672,10 @@ function ArtifactPanel({
   );
 }
 
+// ------------------------------------------------------------------
+// ChatInput
+// ------------------------------------------------------------------
+
 function ChatInput() {
   const [value, setValue] = useState("");
   return (
@@ -429,7 +688,11 @@ function ChatInput() {
       />
       <div className="flex items-center justify-between px-3 pb-3">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
             <Paperclip className="h-4 w-4" />
           </Button>
         </div>
@@ -450,7 +713,7 @@ function ChatInput() {
 // ------------------------------------------------------------------
 
 export default function ChatDetailPage() {
-  const [artifactOpen, setArtifactOpen] = useState(false);
+  const [artifactOpen, setArtifactOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom on mount
@@ -459,19 +722,6 @@ export default function ChatDetailPage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, []);
-
-  // Group messages by role for rendering
-  const groups: MessageItem[][] = [];
-  let currentGroup: MessageItem[] = [];
-  for (const msg of MOCK_MESSAGES) {
-    if (currentGroup.length === 0 || currentGroup[0].role === msg.role) {
-      currentGroup.push(msg);
-    } else {
-      groups.push(currentGroup);
-      currentGroup = [msg];
-    }
-  }
-  if (currentGroup.length) groups.push(currentGroup);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
@@ -485,7 +735,7 @@ export default function ChatDetailPage() {
         {/* Header */}
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
           <div className="text-sm font-medium text-foreground">
-            用户要求我返回一个标题，只需要标题，不要引号，不要解释。但问题是...
+            帮我生成一个登录页面
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -504,7 +754,11 @@ export default function ChatDetailPage() {
               )}
               onClick={() => setArtifactOpen((v) => !v)}
             >
-              {artifactOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
+              {artifactOpen ? (
+                <PanelLeftClose className="h-3.5 w-3.5" />
+              ) : (
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+              )}
               附件
             </Button>
           </div>
@@ -513,12 +767,8 @@ export default function ChatDetailPage() {
         {/* Messages */}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4">
           <div className="mx-auto max-w-3xl pb-4 pt-4">
-            {groups.map((group, idx) => (
-              <ChatMessageGroup
-                key={idx}
-                items={group}
-                onViewArtifact={() => setArtifactOpen(true)}
-              />
+            {MOCK_MESSAGES.map((message) => (
+              <MessageGroup key={message.id} message={message} />
             ))}
             <div className="h-6" />
           </div>
@@ -539,7 +789,10 @@ export default function ChatDetailPage() {
           artifactOpen ? "w-[45%] opacity-100" : "w-0 opacity-0"
         )}
       >
-        <ArtifactPanel open={artifactOpen} onClose={() => setArtifactOpen(false)} />
+        <ArtifactPanel
+          open={artifactOpen}
+          onClose={() => setArtifactOpen(false)}
+        />
       </div>
     </div>
   );
