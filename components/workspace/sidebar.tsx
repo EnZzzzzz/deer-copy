@@ -112,13 +112,14 @@ export function Sidebar() {
         <ScrollArea className="h-[calc(100vh-280px)] sidebar-scroll">
           <div className="space-y-1 pr-2">
             {mockChatHistory.map((chat) => (
-              <Button
-                key={chat.id}
-                variant="ghost"
-                className="w-full justify-start truncate rounded-xl px-3 py-2 text-left text-sm font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              >
-                <span className="truncate">{chat.title}</span>
-              </Button>
+              <Link key={chat.id} href={`/chat/${chat.id}`} className="block w-full">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start truncate rounded-xl px-3 py-2 text-left text-sm font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span className="truncate">{chat.title}</span>
+                </Button>
+              </Link>
             ))}
           </div>
         </ScrollArea>

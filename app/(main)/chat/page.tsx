@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Input } from "@/components/ui/input";
@@ -83,25 +84,26 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="divide-y divide-border">
           {filteredChats.map((chat, index) => (
-            <div
-              key={chat.id}
-              className={cn(
-                "group cursor-pointer px-6 py-4 transition-colors hover:bg-accent",
-                index === 0 && "bg-accent/50"
-              )}
-            >
-              <div className="mb-1 flex items-center justify-between">
-                <h3 className="text-sm font-medium text-foreground">
-                  {chat.title || "Untitled"}
-                </h3>
-                <span className="text-xs text-muted-foreground">{chat.time}</span>
+            <Link key={chat.id} href={`/chat/${chat.id}`}>
+              <div
+                className={cn(
+                  "group cursor-pointer px-6 py-4 transition-colors hover:bg-accent",
+                  index === 0 && "bg-accent/50"
+                )}
+              >
+                <div className="mb-1 flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-foreground">
+                    {chat.title || "Untitled"}
+                  </h3>
+                  <span className="text-xs text-muted-foreground">{chat.time}</span>
+                </div>
+                {chat.preview && (
+                  <p className="line-clamp-1 text-xs text-muted-foreground">
+                    {chat.preview}
+                  </p>
+                )}
               </div>
-              {chat.preview && (
-                <p className="line-clamp-1 text-xs text-muted-foreground">
-                  {chat.preview}
-                </p>
-              )}
-            </div>
+            </Link>
           ))}
         </div>
       </div>
